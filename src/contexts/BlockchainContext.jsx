@@ -1,16 +1,54 @@
 import React from "react";
 import { ethers } from "ethers";
+import { chainId } from "wagmi";
+import { convertCompilerOptionsFromJson } from "typescript";
 
 export const BlockchainContext = React.createContext({
   currentAccount: null,
-  provider: null
+  provider: null,
+  
 });
 
 const BlockchainContextProvider = ({ children }) => {
   const [currentAccount, setCurrentAccount] = React.useState(null);
   const [provider, setProvider] = React.useState(null);
+  
 
   React.useEffect(() => {
+    const updateCurrentAccounts = accounts => {
+      const [_account] = accounts;
+      //console.log(`_account = ${_account}`);
+      setCurrentAccount(_account); 
+    }
+
+    const requestAccountsError = (error) => {
+      if (error.code === 4001) {
+        // EIP-1193 userRejectedRequest error
+        console.log('Please connect to MetaMask.');
+      } else {
+        console.error(error);
+      }
+    };
+
+    const switchChain = async() => {
+      await ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x4' }],
+      });
+    }
+
+    window.ethereum.request({ method: 'eth_requestAccounts' })
+    .then(updateCurrentAccounts)
+    .catch(requestAccountsError);
+    window.ethereum.on("accountsChanged", updateCurrentAccounts);
+
+    switchChain();
+    window.ethereum.on('chainChanged', switchChain);
+    
+    return () => {
+      window.ethereum.removeListener('accountsChanged', updateCurrentAccounts);
+      window.ethereum.removeListener('chainChanged', switchChain);
+    }
     /*
      * 使用 window.ethereum 來透過 Matamask 來取得錢包地址
      * 參考資料: https://docs.metamask.io/guide/rpc-api.html
@@ -22,15 +60,19 @@ const BlockchainContextProvider = ({ children }) => {
   }, []);
 
   React.useEffect(() => {
+    const _provider = new ethers.providers.Web3Provider(window.ethereum);
+    //console.log(_provider);
+    setProvider(_provider);
+    
     /*
      * 使用 ethers.js
      * 透過 Web3Provider 將 window.ethereum 做為參數建立一個新的 web3 provider
      * 並將這個新的 web3 provider 設定成 provider 的 state
      */
-  }, []);
+  }, [currentAccount]);
 
   return (
-    <BlockchainContext.Provider value={{ currentAccount, provider }}>
+    <BlockchainContext.Provider value={{ currentAccount, provider}}>
       {children}
     </BlockchainContext.Provider>
   );
